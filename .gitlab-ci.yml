@@ -6,6 +6,9 @@ build:
   script:
   - cp src/include/SteamWorks.inc /sourcemod/scripting/include
   - /sourcemod/scripting/spcomp -o discord_reports src/plugin.sp
+  - mkdir plugins
+  - cp discord_reports.smx plugins/
   artifacts:
     paths:
-      - discord_reports.smx
+      - plugins/
+      - translations/

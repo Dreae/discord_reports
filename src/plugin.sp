@@ -5,7 +5,7 @@ public Plugin myinfo = {
     name = "Discord Reports",
     author = "Dreae",
     description = "Fire a Discord webhook to report players.",
-    version = "1.0.0",
+    version = "1.0.1",
     url = "https://dreae.onl"
 };
 
@@ -97,7 +97,7 @@ public Action Cmd_Report(int client, int args) {
     bool tn_is_ml;
     int found = ProcessTargetString(target_string, client, target, 1, COMMAND_FILTER_NO_IMMUNITY | COMMAND_FILTER_NO_BOTS | COMMAND_FILTER_NO_MULTI, target_name, 128, tn_is_ml);
     if (found != 1) {
-        PrintTargetFailure(client, found);
+        ReplyToTargetError(client, found);
         return Plugin_Handled;
     }
 
@@ -113,6 +113,7 @@ public Action Cmd_Report(int client, int args) {
 
     char report_msg[1024];
     Format(report_msg, sizeof(report_msg), "%T", "Report", LANG_SERVER, g_sRoleId, g_sHostname, reporter_name, reporter_steamid, target_name, target_steamid, reason);
+    ReplaceString(report_msg, strlen(report_msg), "\"", "\\\"", false);
     if (strlen(g_sWebhook) != 0) {
         char json_body[1248];
         Format(json_body, sizeof(json_body), "{\"content\": \"%s\", \"embeds\": [{\"title\": \"%T\", \"description\": \"steam://connect/%s\"}]}", report_msg, "JoinServer", LANG_SERVER, g_sPublicIp);
@@ -142,14 +143,4 @@ public Callback_ReqComplete(Handle req, bool failure, bool successful, EHTTPStat
 
 void PrintUsage(int client) {
     ReplyToCommand(client, "sm_report <user> <reason>");
-}
-
-void PrintTargetFailure(int client, int reason) {
-    if (reason == COMMAND_TARGET_NOT_HUMAN) {
-        ReplyToCommand(client, "You can't report a bot!");
-    } else if (reason == COMMAND_TARGET_AMBIGUOUS) {
-        ReplyToCommand(client, "Multiple players matched that name, try being more specific");
-    } else {
-        ReplyToCommand(client, "Unable to find a matching user");
-    }
 }

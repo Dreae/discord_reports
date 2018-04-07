@@ -1,0 +1,26 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "compile",
+            "type": "shell",
+            "command": "${config:sourcepawnLanguageServer.sourcemod_home}/../spcomp",
+            "args": [
+                "-o ${workspaceFolderBasename}",
+                "-D ${workspaceFolder}/compiled",
+                "${workspaceFolder}/src/plugin.sp"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true
+            }
+        }
+    ]
+}

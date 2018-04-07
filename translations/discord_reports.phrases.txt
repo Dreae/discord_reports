@@ -1,0 +1,9 @@
+"Phrases"
+{
+    "Report"
+    {
+        //                  @Mention,ServerName,ServerIp,ReporterName,ReporterId,TargetName,TargetId,Reason
+        "#format"           "{1:s},{2:s},{3:s},{4:s},{5:s},{6:s},{7:s}"
+        "en"                "**New Report!** <@{1}> \\n **Server**: {2} \\n **Reporter**: [{3}](https://steamidfinder.com/lookup/{4}) \\n **Rulebreaker**: [{5}](https://steamidfinder.com/lookup/{6}) \\n **Description**: {7}"
+    }
+}

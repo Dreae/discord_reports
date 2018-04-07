@@ -13,11 +13,13 @@ ConVar g_hCvarHostname;
 ConVar g_hCvarPort;
 ConVar g_hCvarRoleId;
 ConVar g_hCvarWebhookURL;
+
 char g_sRoleId[64];
 char g_sHostname[128];
 char g_sWebhook[512];
 char g_sPublicIp[24];
 char g_sPort[6];
+bool g_bHelloNotified[MAXPLAYERS] = false;
 
 public void OnPluginStart() {
     g_hCvarHostname = FindConVar("hostname");
@@ -29,6 +31,8 @@ public void OnPluginStart() {
     g_hCvarWebhookURL = CreateConVar("discord_report_webhook_url", "", "Webhook to call to send a report", FCVAR_PROTECTED);
     g_hCvarRoleId.AddChangeHook(On_RoleIdUpdate);
     g_hCvarWebhookURL.AddChangeHook(On_WebhookUpdate);
+
+    HookEvent("player_spawn", On_PlayerSpawn);
 
     LoadTranslations("common.phrases");
     LoadTranslations("discord_reports.phrases");
@@ -43,6 +47,29 @@ public void OnConfigsExecuted() {
     int pieces[4];
     SteamWorks_GetPublicIP(pieces);
     Format(g_sPublicIp, sizeof(g_sPublicIp), "%d.%d.%d.%d:%s", pieces[0], pieces[1], pieces[2], pieces[3], g_sPort);
+}
+
+public void OnClientDisconnect(int client) {
+    g_bHelloNotified[client] = false;
+}
+
+public Action On_PlayerSpawn(Event event, const char[] name, bool dontBroadcast) {
+    int user_id = event.GetInt("userid");
+    int client = GetClientOfUserId(user_id);
+
+    CreateTimer(0.1, Timer_Notify, client, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+Action Timer_Notify(Handle timer, any data) {
+    int client = view_as<int>(data);
+    if (IsClientInGame(client) && IsPlayerAlive(client)) {
+        if (!g_bHelloNotified[client]) {
+            PrintToChat(client, "\x01[\x03Reports\x01] \x04%t", "HelloMsg");
+            g_bHelloNotified[client] = true;
+        }
+    }
+
+    return Plugin_Stop;
 }
 
 public void On_RoleIdUpdate(ConVar cvar, const char[] oldValue, const char[] newValue) {
@@ -88,14 +115,29 @@ public Action Cmd_Report(int client, int args) {
     Format(report_msg, sizeof(report_msg), "%T", "Report", LANG_SERVER, g_sRoleId, g_sHostname, reporter_name, reporter_steamid, target_name, target_steamid, reason);
     if (strlen(g_sWebhook) != 0) {
         char json_body[1248];
-        Format(json_body, sizeof(json_body), "{\"content\": \"%s\", \"embeds\": [{\"title\": \"Join Server\", \"description\": \"steam://connect/%s\"}]}", report_msg, g_sPublicIp);
+        Format(json_body, sizeof(json_body), "{\"content\": \"%s\", \"embeds\": [{\"title\": \"%T\", \"description\": \"steam://connect/%s\"}]}", report_msg, "JoinServer", LANG_SERVER, g_sPublicIp);
 
         Handle req = SteamWorks_CreateHTTPRequest(k_EHTTPMethodPOST, g_sWebhook);
+
+        SteamWorks_SetHTTPRequestContextValue(req, client);
         SteamWorks_SetHTTPRequestRawPostBody(req, "Application/json", json_body, strlen(json_body));
+        SteamWorks_SetHTTPCallbacks(req, Callback_ReqComplete);
+
         SteamWorks_SendHTTPRequest(req);
     }
 
     return Plugin_Handled;
+}
+
+public Callback_ReqComplete(Handle req, bool failure, bool successful, EHTTPStatusCode statusCode, any data) {
+    int client = view_as<int>(data);
+    if (failure || !successful || (statusCode < k_EHTTPStatusCode200OK || statusCode >= k_EHTTPStatusCode400BadRequest)) {
+        PrintToChat(client, "\x01[\x03Reports\x01] \x04%t", "ReportFailed");
+    } else {
+        PrintToChat(client, "\x01[\x03Reports\x01] \x04%t", "ReportSent");
+    }
+
+    req.Close();
 }
 
 void PrintUsage(int client) {

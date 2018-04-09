@@ -26,4 +26,14 @@
     {
         "en"                "Your report has been submitted"
     }
+
+    "ReportRateLimit"
+    {
+        "en"                "Someone has recently submitted a report for this server, please wait before sending another"
+    }
+
+    "PlayerReportRateLimit"
+    {
+        "en"                "You have already reported this player"
+    }
 }

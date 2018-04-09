@@ -9,9 +9,11 @@
             "command": "${config:sourcepawnLanguageServer.sourcemod_home}/../spcomp",
             "args": [
                 "-o ${workspaceFolderBasename}",
-                "-D ${workspaceFolder}/compiled",
                 "${workspaceFolder}/src/plugin.sp"
             ],
+            "options": {
+                "cwd": "${workspaceFolder}/compiled"
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true

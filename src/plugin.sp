@@ -1,5 +1,5 @@
 #include <sourcemod>
-#include "include/SteamWorks.inc"
+#include <SteamWorks>
 
 public Plugin myinfo = {
     name = "Discord Reports",
@@ -70,6 +70,10 @@ public void OnConfigsExecuted() {
 
 public void OnClientDisconnect(int client) {
     g_bHelloNotified[client] = false;
+    for (int c = 1; c < MAXPLAYERS; c++) {
+        g_iLastPlayerReport[client][c] = 0;
+        g_iLastPlayerReport[c][client] = 0;
+    }
 }
 
 public Action On_PlayerSpawn(Event event, const char[] name, bool dontBroadcast) {

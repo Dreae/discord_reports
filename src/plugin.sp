@@ -1,5 +1,6 @@
 #include <sourcemod>
 #include <SteamWorks>
+#include <discord>
 
 public Plugin myinfo = {
     name = "Discord Reports",
@@ -12,17 +13,20 @@ public Plugin myinfo = {
 ConVar g_hCvarHostname;
 ConVar g_hCvarPort;
 ConVar g_hCvarRoleId;
-ConVar g_hCvarWebhookURL;
+ConVar g_hCvarChannelId;
+ConVar g_hCvarStaffRoleId;
 ConVar g_hCvarRateLimit;
 ConVar g_hCvarReportDelay;
 ConVar g_hCvarPlayerReportDelay;
 
 char g_sRoleId[64];
 char g_sHostname[128];
-char g_sWebhook[512];
 char g_sPublicIp[24];
 char g_sPort[6];
+int g_iChannelId[2];
+int g_iRoleId[2];
 bool g_bHelloNotified[MAXPLAYERS] = false;
+bool g_bConnected = false;
 
 bool g_bRateLimit = false;
 int g_iLastServerReport = 0;
@@ -37,13 +41,15 @@ public void OnPluginStart() {
     RegConsoleCmd("sm_report", Cmd_Report, "sm_report <player> <reason>");
 
     g_hCvarRoleId = CreateConVar("discord_report_role_id", "", "Role to mention in reports", FCVAR_PROTECTED);
-    g_hCvarWebhookURL = CreateConVar("discord_report_webhook_url", "", "Webhook to call to send a report", FCVAR_PROTECTED);
+    g_hCvarChannelId = CreateConVar("discord_report_channel_id", "", "ChannelId for discord reprots", FCVAR_PROTECTED);
+    g_hCvarStaffRoleId = CreateConVar("discord_report_staff_id", "", "The RoleId that should be considered staff", FCVAR_PROTECTED);
     g_hCvarRateLimit = CreateConVar("discord_report_rate_limiting", "1", "Should we rate limit reports", FCVAR_NONE);
     g_hCvarReportDelay = CreateConVar("discord_report_delay", "30", "Number of seconds this server must wait to send another report", FCVAR_NONE);
     g_hCvarPlayerReportDelay = CreateConVar("discord_report_player_delay", "600", "Number of seconds a player must wait to send another report about the same player", FCVAR_NONE);
 
     g_hCvarRoleId.AddChangeHook(On_RoleIdUpdate);
-    g_hCvarWebhookURL.AddChangeHook(On_WebhookUpdate);
+    g_hCvarChannelId.AddChangeHook(On_ChannelIdUpdate);
+    g_hCvarStaffRoleId.AddChangeHook(On_RoleIdUpdate);
     g_hCvarRateLimit.AddChangeHook(On_RateLimitUpdate);
     g_hCvarReportDelay.AddChangeHook(On_ReportDelayUpdate);
     g_hCvarPlayerReportDelay.AddChangeHook(On_PlayerReportDelayUpdate);
@@ -57,8 +63,18 @@ public void OnPluginStart() {
 public void OnConfigsExecuted() {
     g_hCvarHostname.GetString(g_sHostname, sizeof(g_sHostname));
     g_hCvarRoleId.GetString(g_sRoleId, sizeof(g_sRoleId));
-    g_hCvarWebhookURL.GetString(g_sWebhook, sizeof(g_sWebhook));
     g_hCvarPort.GetString(g_sPort, sizeof(g_sPort));
+
+    char channelId[24];
+    g_hCvarChannelId.GetString(channelId, sizeof(channelId));
+    StringToUInt64(channelId, g_iChannelId);
+
+    char roleId[24];
+    g_hCvarStaffRoleId.GetString(roleId, sizeof(roleId));
+    if (strlen(roleId) != 0) {
+        StringToUInt64(roleId, g_iRoleId);
+    }
+
     g_bRateLimit = g_hCvarRateLimit.BoolValue;
     g_iReportDelay = g_hCvarReportDelay.IntValue;
     g_iReportPlayerDelay = g_hCvarPlayerReportDelay.IntValue;
@@ -87,7 +103,7 @@ Action Timer_Notify(Handle timer, any data) {
     int client = view_as<int>(data);
     if (IsClientInGame(client) && IsPlayerAlive(client)) {
         if (!g_bHelloNotified[client]) {
-            PrintToChat(client, "\x01[\x03Reports\x01] \x04%t", "HelloMsg");
+            print_to_client(client, "%t", "HelloMsg");
             g_bHelloNotified[client] = true;
         }
     }
@@ -99,8 +115,8 @@ public void On_RoleIdUpdate(ConVar cvar, const char[] oldValue, const char[] new
     strcopy(g_sRoleId, sizeof(g_sRoleId), newValue);
 }
 
-public void On_WebhookUpdate(ConVar cvar, const char[] oldValue, const char[] newValue) {
-    strcopy(g_sWebhook, sizeof(g_sWebhook), newValue);
+public void On_ChannelIdUpdate(ConVar cvar, const char[] oldValue, const char[] newValue) {
+    StringToUInt64(newValue, g_iChannelId);
 }
 
 public void On_RateLimitUpdate(ConVar cvar, const char[] oldValue, const char[] newValue) {
@@ -152,45 +168,125 @@ public Action Cmd_Report(int client, int args) {
 
     char reason[256];
     Format(reason, sizeof(reason), arguments[len]);
+    ReplaceString(reason, strlen(reason), "\"", "\\\"", false);
 
     char reporter_name[32], reporter_steamid[32];
     GetClientName(client, reporter_name, sizeof(reporter_name));
     GetClientAuthId(client, AuthId_SteamID64, reporter_steamid, sizeof(reporter_steamid), true);
 
+    if (g_bConnected) {
+        char titleBuffer[64]
+        Format(titleBuffer, sizeof(titleBuffer), "%T", "NewReport", LANG_SERVER);
 
-    char report_msg[1024];
-    Format(report_msg, sizeof(report_msg), "%T", "Report", LANG_SERVER, g_sRoleId, g_sHostname, reporter_name, reporter_steamid, target_name, target_steamid, reason);
-    ReplaceString(report_msg, strlen(report_msg), "\"", "\\\"", false);
-    if (strlen(g_sWebhook) != 0) {
-        char json_body[1248];
-        Format(json_body, sizeof(json_body), "{\"content\": \"%s\", \"embeds\": [{\"title\": \"%T\", \"description\": \"steam://connect/%s\"}]}", report_msg, "JoinServer", LANG_SERVER, g_sPublicIp);
+        char reporter[32];
+        Format(reporter, sizeof(reporter), "%T", "Reporter", LANG_SERVER);
+        char reporterName[128];
+        Format(reporterName, sizeof(reporterName), "%s \\<[%s](https://steamidfinder.com/lookup/%s)\\>", reporter_name, reporter_steamid, reporter_steamid);
 
-        Handle req = SteamWorks_CreateHTTPRequest(k_EHTTPMethodPOST, g_sWebhook);
+        char rulebreaker[32];
+        Format(rulebreaker, sizeof(rulebreaker), "%T", "Rulebreaker", LANG_SERVER);
+        char rulebreakerName[128];
+        Format(rulebreakerName, sizeof(rulebreakerName), "%s \\<[%s](https://steamidfinder.com/lookup/%s)\\>", target_name, target_steamid, target_steamid);
 
-        SteamWorks_SetHTTPRequestContextValue(req, client, target[0]);
-        SteamWorks_SetHTTPRequestRawPostBody(req, "Application/json", json_body, strlen(json_body));
-        SteamWorks_SetHTTPCallbacks(req, Callback_ReqComplete);
+        char description[32];
+        Format(description, sizeof(description), "%T", "Description", LANG_SERVER);
 
-        SteamWorks_SendHTTPRequest(req);
+        char connect[32];
+        Format(connect, sizeof(connect), "%T", "Connect", LANG_SERVER);
+        char connectUrl[40];
+        Format(connectUrl, sizeof(connectUrl), "steam://connect/%s", g_sPublicIp);
+
+        NewDiscordMessage msg = new NewDiscordMessage();
+        msg.SetContent("<@%s>", g_sRoleId);
+
+        NewDiscordEmbed embed = new NewDiscordEmbed();
+        embed.SetTitle(titleBuffer);
+        embed.SetDescription(g_sHostname);
+        embed.AddField(reporter, reporterName, true);
+        embed.AddField(rulebreaker, rulebreakerName, true);
+        embed.AddField(description, reason);
+        embed.AddField(connect, connectUrl);
+
+        msg.SetEmbed(embed);
+        Discord_SendToChannel(g_iChannelId, msg);
     }
 
     return Plugin_Handled;
 }
 
-public Callback_ReqComplete(Handle req, bool failure, bool successful, EHTTPStatusCode statusCode, any data, any data1) {
-    int client = view_as<int>(data);
-    int target = view_as<int>(data1);
-    if (failure || !successful || (statusCode < k_EHTTPStatusCode200OK || statusCode >= k_EHTTPStatusCode400BadRequest)) {
-        PrintToChat(client, "\x01[\x03Reports\x01] \x04%t", "ReportFailed");
-    } else {
-        g_iLastServerReport = GetTime();
-        g_iLastPlayerReport[client][target] = GetTime();
-        PrintToChat(client, "\x01[\x03Reports\x01] \x04%t", "ReportSent");
-    }
-
-    req.Close();
+public void OnDiscordReady(DiscordReady ready) {
+    g_bConnected = true;
 }
 
 void PrintUsage(int client) {
     ReplyToCommand(client, "sm_report <user> <reason>");
+}
+
+public void OnDiscordMessage(DiscordUser author, DiscordMessage msg) {
+    int channelId[2];
+    msg.ChannelId(channelId);
+
+    if (channelId[0] != g_iChannelId[0] || channelId[1] != g_iChannelId[1]) {
+        return;
+    }
+
+    if (g_iRoleId[0] != 0 && g_iRoleId[1] != 0) {
+        int guildId[2];
+        msg.GuildId(guildId);
+
+        if (guildId[0] == 0 || guildId[1] == 0 || !author.HasRole(guildId, g_iRoleId)) {
+            return;
+        }
+    }
+
+    char content[512];
+    msg.GetContent(content, sizeof(content));
+
+    char cmd[32];
+    int len = BreakString(content, cmd, sizeof(cmd));
+    if (StrEqual(cmd, "?warn", false)) {
+        do_warn(content[len], msg);
+    }
+}
+
+void do_warn(const char[] content, DiscordMessage msg) {
+    char steam_id[21];
+    int len = BreakString(content, steam_id, sizeof(steam_id));
+    int client = find_target(steam_id);
+
+    if (client != 0) {
+        print_to_client(client, "%t", "ClientWarned", content[len]);
+
+        char name[256];
+        Format(name, sizeof(name), "%L", client);
+        msg.ReplyToChannel("%T", "AdminClientWarned", LANG_SERVER, name);
+    }
+}
+
+int find_target(const char[] steam_id) {
+    for (int i = 1; i < MaxClients; i++) {
+        if (valid_client(i)) {
+            char target_id[21];
+            GetClientAuthId(i, AuthId_SteamID64, target_id, sizeof(target_id), true);
+
+            if (StrEqual(steam_id, target_id)) {
+                return i;
+            }
+        }
+    }
+
+    return 0;
+}
+
+bool valid_client(int client) {
+    return IsClientConnected(client) && IsClientAuthorized(client);
+}
+
+void print_to_client(int client, const char[] msg, any ...) {
+    SetGlobalTransTarget(client);
+
+    char content[1024];
+    VFormat(content, sizeof(content), msg, 3);
+
+    PrintToChat(client, "\x01[\x03Reports\x01] \x04%s", content);
 }

@@ -1,25 +1,33 @@
 "Phrases"
 {
-    "Report"
+    "NewReport"
     {
-        //                  @Mention,ServerName,ServerIp,ReporterName,ReporterId,TargetName,TargetId,Reason
-        "#format"           "{1:s},{2:s},{3:s},{4:s},{5:s},{6:s},{7:s}"
-        "en"                "**New Report!** <@{1}> \\n **Server**: {2} \\n **Reporter**: [{3}](https://steamidfinder.com/lookup/{4}) \\n **Rulebreaker**: [{5}](https://steamidfinder.com/lookup/{6}) \\n **Description**: {7}"
+        "en"                "New Report!"
     }
 
-    "JoinServer"
+    "Reporter"
     {
-        "en"                "Join Server"
+        "en"                "Reporter"
+    }
+
+    "Rulebreaker"
+    {
+        "en"                "Rulebreaker"
+    }
+
+    "Description"
+    {
+        "en"                "Description"
+    }
+
+    "Connect"
+    {
+        "en"                "Connect"
     }
 
     "HelloMsg"
     {
         "en"                "This server is running reports. Use !report <player> <reason> to report troublemakers"
-    }
-
-    "ReportFailed"
-    {
-        "en"                "There was an error sending your report, please try again"
     }
 
     "ReportSent"
@@ -35,5 +43,17 @@
     "PlayerReportRateLimit"
     {
         "en"                "You have already reported this player"
+    }
+
+    "ClientWarned"
+    {
+        "#format"           "{1:s}"
+        "en"                "You have received a warning: {1}"
+    }
+
+    "AdminClientWarned"
+    {
+        "#format"           "{1:s}"
+        "en"                "Client {1} has been warned"
     }
 }

@@ -116,7 +116,9 @@ public void On_RoleIdUpdate(ConVar cvar, const char[] oldValue, const char[] new
 }
 
 public void On_ChannelIdUpdate(ConVar cvar, const char[] oldValue, const char[] newValue) {
-    StringToUInt64(newValue, g_iChannelId);
+    if (strlen(newValue) != 0) {
+        StringToUInt64(newValue, g_iChannelId);
+    }
 }
 
 public void On_RateLimitUpdate(ConVar cvar, const char[] oldValue, const char[] newValue) {
@@ -134,6 +136,10 @@ public void On_PlayerReportDelayUpdate(ConVar cvar, const char[] oldValue, const
 public Action Cmd_Report(int client, int args) {
     if (args < 2) {
         PrintUsage(client);
+        return Plugin_Handled;
+    }
+
+    if (!g_bConnected || g_iChannelId[0] == 0 || g_iChannelId[1] == 0) {
         return Plugin_Handled;
     }
 
@@ -244,7 +250,7 @@ public void OnDiscordMessage(DiscordUser author, DiscordMessage msg) {
 
     char cmd[32];
     int len = BreakString(content, cmd, sizeof(cmd));
-    if (StrEqual(cmd, "?warn", false)) {
+    if (StrEqual(cmd, "?rwarn", false)) {
         do_warn(content[len], msg);
     }
 }
@@ -255,6 +261,7 @@ void do_warn(const char[] content, DiscordMessage msg) {
     int client = find_target(steam_id);
 
     if (client != 0) {
+        PrintHintText(client, "<font size='34' color='#FF4C4C' face=''>Reports</font>\n%t", "BeenWarned");
         print_to_client(client, "%t", "ClientWarned", content[len]);
 
         char name[256];

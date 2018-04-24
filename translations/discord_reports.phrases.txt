@@ -45,6 +45,11 @@
         "en"                "You have already reported this player"
     }
 
+    "BeenWarned"
+    {
+        "en"                "You have received a warning."
+    }
+
     "ClientWarned"
     {
         "#format"           "{1:s}"
